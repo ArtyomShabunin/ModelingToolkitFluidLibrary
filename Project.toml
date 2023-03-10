@@ -1,0 +1,9 @@
+name = "ModelingToolkitFluidLibrary"
+uuid = "651061fc-1d57-42ed-a28d-757dd6599ef6"
+authors = ["a.shabunin "]
+version = "0.1.0"
+
+[deps]
+CoolProp = "e084ae63-2819-5025-826e-f8e611a84251"
+IfElse = "615f187c-cbe4-4ef1-ba3b-2fcf58d6d173"
+ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
