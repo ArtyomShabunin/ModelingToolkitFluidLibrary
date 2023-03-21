@@ -1,16 +1,7 @@
 """
 
 """
-module Ports
-using ModelingToolkit, CoolProp, IfElse
 
-@parameters t
-D = Differential(t)
-
-hpt(P, T) = PropsSI("H", "P", P, "T", T, "Air")
-@register hpt(P, T)
-
-export FluidPort
 @connector function FluidPort(; name, P=0.0, m_flow=0.0, h_outflow=0.0)
     vars = @variables h_outflow(t) = h_outflow [connect = Stream] m_flow(t) = m_flow [
         connect = Flow,
@@ -18,7 +9,6 @@ export FluidPort
     ODESystem(Equation[], t, vars, []; name=name)
 end
 
-export TwoPorts
 function TwoPorts(; name)
     vars = @variables dp(t) dh(t) m_flow(t)
 
@@ -36,6 +26,4 @@ function TwoPorts(; name)
     push!(eqns, m_flow ~ port_a.m_flow)
 
     compose(ODESystem(eqns, t, vars, []; name=name), subs)
-end
-
 end
