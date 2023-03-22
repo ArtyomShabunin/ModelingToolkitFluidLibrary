@@ -2,14 +2,15 @@ using Revise
 
 using ModelingToolkit
 using DifferentialEquations
-import ModelingToolkitFluidLibrary as Fluid
+
+import ModelingToolkitFluidLibrary: Source, LinearMassFlow, Node, Media.Air
 
 using Plots
 
 @parameters t
 
-@named source_a = Source(P=2.5e5, T=300.0)
-@named source_b = Source(P=2.3e5, T=310.0)
+@named source_a = Source(Medium=Air, P=2.5e5, T=300.0)
+@named source_b = Source(Medium=Air, P=2.3e5, T=310.0)
 @named lin_flow = LinearMassFlow()
 @named node = Node()
 @named lin_flow_2 = LinearMassFlow()
@@ -41,4 +42,3 @@ prob = ODEProblem(sys, u0, (0, 10000.0))
 sol = solve(prob, Rodas4())
 
 plot(sol, idxs=[node.h])
-

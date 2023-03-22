@@ -20,4 +20,6 @@ include("Pipes/Pipes.jl")
 export Node
 include("Nodes/Nodes.jl")
 
+include("Media/Media.jl")
+
 end # module
