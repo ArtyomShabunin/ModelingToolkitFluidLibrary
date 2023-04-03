@@ -1,44 +1,49 @@
 using Revise
-
 using ModelingToolkit
 using DifferentialEquations
-
+using OrdinaryDiffEq: ReturnCode.Success
 import ModelingToolkitFluidLibrary: Source, LinearMassFlow, Node, Media.Air
-
 using Plots
+using Test
 
-@parameters t
+@testset "Air demo" begin
 
-@named source_a = Source(Medium=Air, P=2.5e5, T=300.0)
-@named source_b = Source(Medium=Air, P=2.3e5, T=310.0)
-@named lin_flow = LinearMassFlow()
-@named node = Node()
-@named lin_flow_2 = LinearMassFlow()
+    @parameters t
 
-subs = [source_a; source_b; lin_flow; node; lin_flow_2]
+    @named source_a = Source(Medium=Air, P=2.5e5, T=300.0)
+    @named source_b = Source(Medium=Air, P=2.3e5, T=310.0)
+    @named lin_flow = LinearMassFlow()
+    @named node = Node()
+    @named lin_flow_2 = LinearMassFlow()
 
-flow_eqs = [
-    connect(source_a.port, lin_flow.port_a)
-    connect(lin_flow.port_b, node.port_a)
-    connect(node.port_b, lin_flow_2.port_a)
-    connect(lin_flow_2.port_b, source_b.port)
-]
+    subs = [source_a; source_b; lin_flow; node; lin_flow_2]
 
-@named _flow_model = ODESystem(flow_eqs, t)
+    flow_eqs = [
+        connect(source_a.port, lin_flow.port_a)
+        connect(lin_flow.port_b, node.port_a)
+        connect(node.port_b, lin_flow_2.port_a)
+        connect(lin_flow_2.port_b, source_b.port)
+    ]
 
-@named flow_model = compose(_flow_model, subs)
+    @named _flow_model = ODESystem(flow_eqs, t)
 
-sys = structural_simplify(flow_model)
+    @named flow_model = compose(_flow_model, subs)
 
-equations(sys)
+    sys = structural_simplify(flow_model)
 
-u0 = [
-    node.P => 2.31e5,
-    node.h => 1300
-]
+    equations(sys)
 
-prob = ODEProblem(sys, u0, (0, 10000.0))
+    u0 = [
+        node.P => 2.31e5,
+        node.h => 1300
+    ]
 
-sol = solve(prob, Rodas4())
+    prob = ODEProblem(sys, u0, (0, 10000.0))
 
-plot(sol, idxs=[node.h])
+    sol = solve(prob, Rodas4())
+
+    @test sol.retcode == Success
+
+    # plot(sol, idxs=[node.h])
+
+end

@@ -14,7 +14,7 @@ include("Ports/Ports.jl")
 export Source, MassFlowSource_T
 include("Sources/Sources.jl")
 
-export LinearMassFlow
+export LinearMassFlow, FlowNode
 include("Pipes/Pipes.jl")
 
 export Node
