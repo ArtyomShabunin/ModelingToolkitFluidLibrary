@@ -12,15 +12,13 @@ using Test
 
 @named source_a = Source(Medium=Water, P=2.5e5, T=30.0)
 @named source_b = Source(Medium=Water, P=2.3e5, T=31.0)
-@named flow_node = LinearMassFlow(Medium=Water, Din=0.05, L=5, ke=0.00014)
+@named flow_node = FlowNode(Medium=Water, Din=0.05, L=5, ke=0.00014)
 
-subs = [source_a; source_b; lin_flow; node; lin_flow_2]
+subs = [source_a; source_b; flow_node]
 
 flow_eqs = [
-    connect(source_a.port, lin_flow.port_a)
-    connect(lin_flow.port_b, node.port_a)
-    connect(node.port_b, lin_flow_2.port_a)
-    connect(lin_flow_2.port_b, source_b.port)
+    connect(source_a.port, flow_node.port_a)
+    connect(flow_node.port_b, source_b.port)
 ]
 
 @named _flow_model = ODESystem(flow_eqs, t)
@@ -32,8 +30,6 @@ sys = structural_simplify(flow_model)
 equations(sys)
 
 u0 = [
-    node.P => 2.31e5,
-    node.h => 1300
 ]
 
 prob = ODEProblem(sys, u0, (0, 10000.0))
