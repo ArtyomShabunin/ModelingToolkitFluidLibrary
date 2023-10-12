@@ -35,7 +35,7 @@ PRC = [
 
 
 β = [1; 2; 3; 4; 5]
-N_T = [90; 92; 95; 97; 100; 105]
+N_T = [0; 92; 95; 97; 100; 105]
 
 interp_eta = interpolate((β, N_T), EtaC, Gridded(Linear()))
 interp_phi = interpolate((β, N_T), PhicC, Gridded(Linear()))
@@ -49,56 +49,78 @@ interp_pr_f(β, N_T) = interp_pr(β, N_T)
 @register_symbolic interp_phi_f(β, N_T)
 @register_symbolic interp_pr_f(β, N_T)
 
-function Compressor(; name)
+function Compressor(; name,
+                    Medium, phi_f, eta_f, pr_f,
+                    N_T_design)
 
-    # pars = @parameters begin
-    # end
-    pars = []
+    pars = @parameters begin
+        N_T_design = N_T_design # Referred design velocity
+    end
 
     vars = @variables begin
         phi(t)
         phic(t)
         eta(t)
         pr(t)
-        β(t)
-        N_T(t)
+        β(t) = 2.0
+        N_T(t) = 95
+        hout_iso(t)
+        omega(t) = 100
+        pr_2(t)
     end
 
     @named two_ports = TwoPorts()
-    @unpack dp, dh, m_flow = two_ports
+    @unpack dp, dh, m_flow, port_a, port_b  = two_ports
 
     # Mechanical TwoPorts
     @named flange_a = Flange()
     @named flange_b = Flange()
 
-    subs = [flange_a, flange_b]
+    @named gas_in = Medium.setState_ph()
+
+    subs = [flange_a, flange_b, gas_in]
+
+    D = Differential(t)
+
     eqns = Equation[]
 
-    push!(eqns, m_flow ~ 1e-3 * dp)
-    push!(eqns, dh ~ 0)
+    # w это m_flow
+
+    push!(eqns, N_T ~ 100*omega/sqrt(gas_in.T/290)/N_T_design)
+
+    push!(eqns, gas_in.P ~ port_a.P)
+    push!(eqns, gas_in.h ~ instream(port_a.h_outflow))
+
+    push!(eqns, hout_iso ~ Medium.isentropicEnthalpy(port_b.P, gas_in))
+    push!(eqns, m_flow ~ phic)
+    push!(eqns, dh ~ 1/eta*(hout_iso - gas_in.h))
 
     push!(eqns, phi ~ flange_a.phi)
     push!(eqns, phi ~ flange_b.phi)
     push!(eqns, 0 ~ flange_a.tau + flange_b.tau)
 
-    push!(eqns, β ~ 2.3)
-    push!(eqns, N_T ~ 95)
+    push!(eqns, 1e1*D(β) ~ pr-pr_2)
+    # push!(eqns, pr_2 ~ 1)
+    push!(eqns, pr_2 ~ port_b.P / port_a.P)
 
-    push!(eqns, phic ~ interp_phi_f(β, N_T))
-    push!(eqns, eta ~ interp_eta_f(β, N_T))
-    push!(eqns, pr ~ interp_pr_f(β, N_T))
+    push!(eqns, phic ~ phi_f(β, N_T))
+    push!(eqns, eta ~ eta_f(β, N_T))
+    push!(eqns, pr ~ pr_f(β, N_T))
+
+    push!(eqns, D(phi) ~ omega)
 
     extend(compose(ODESystem(eqns, t, vars, pars; name=name), subs), two_ports)
 end
 
+@parameters t
 
 @named torque = Torque(; use_support=false)
 @named speed = Speed(; use_support=false)
-@named compressor = Compressor()
+@named compressor = Compressor(; Medium=Air, phi_f=interp_phi_f, eta_f=interp_eta_f, pr_f=interp_pr_f, N_T_design=100)
 @named torque_source = Blocks.Constant(; k=100)
 @named speed_source = Blocks.Constant(; k=100)
 @named source_a = Source(Medium=Air, P=2.5e5, T=30.0 + 273.15)
-@named source_b = Source(Medium=Air, P=2.3e5, T=31.0 + 273.15)
+@named source_b = Source(Medium=Air, P=34e5, T=31.0 + 273.15)
 
 connections = [
     connect(torque_source.output, torque.tau),
@@ -121,7 +143,11 @@ connections = [
     ])
 
 sys = structural_simplify(model)
-prob = ODEProblem(sys, [], (0, 100.0))
-sol = solve(prob, Rodas4())
+prob = ODAEProblem(sys, [], (0, 100.0))
+sol = solve(prob, Tsit5())
 
-plot(sol, idxs=[compressor.lin])
+sol[compressor.pr][end]
+
+sol[t][29]
+
+plot(sol, idxs=[compressor.β])
