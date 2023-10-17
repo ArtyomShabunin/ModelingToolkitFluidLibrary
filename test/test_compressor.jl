@@ -133,7 +133,7 @@ plot(sol, idxs=[cm.β])
 
 
 function Compressor(; name,
-                    Medium, phi_f, eta_f, pr_f, compressor_map,
+                    Medium, cm,
                     N_T_design)
 
     pars = @parameters begin
@@ -150,20 +150,10 @@ function Compressor(; name,
     @named two_ports = TwoPorts()
     @unpack dp, dh, m_flow, port_a, port_b  = two_ports
 
-    # Mechanical TwoPorts
     @named flange_a = Flange()
     @named flange_b = Flange()
 
     @named gas_in = Medium.setState_ph()
-
-    @named cdm = compressor_map
-
-    # @named cm = compressor_map(
-    # phi_f=phi_f,
-    # eta_f=eta_f,
-    # pr_f=pr_f,
-    # β_bounds=(1.0,5.0),
-    # N_T_bounds=(90.0,105.0))
 
     subs = [flange_a, flange_b, gas_in, cm]
 
@@ -204,7 +194,8 @@ end
 
 @named torque = Torque(; use_support=false)
 @named speed = Speed(; use_support=false)
-@named compressor = Compressor(; Medium=Air, phi_f=interp_phi_f, eta_f=interp_eta_f, pr_f=interp_pr_f, N_T_design=100)
+@named cm = compressor_map(phi_f=interp_phi_f, eta_f=interp_eta_f, pr_f=interp_pr_f, β_bounds=(1.0,5.0), N_T_bounds=(90.0,105.0))
+@named compressor = Compressor(; Medium=Air, cm=cm, N_T_design=100)
 @named torque_source = Blocks.Constant(; k=100)
 @named speed_source = Blocks.Constant(; k=100)
 @named source_a = Source(Medium=Air, P=2.5e5, T=30.0 + 273.15)
