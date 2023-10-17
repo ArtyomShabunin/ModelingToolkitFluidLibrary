@@ -7,6 +7,8 @@ using Interpolations
 using OrdinaryDiffEq: ReturnCode.Success
 import ModelingToolkitFluidLibrary: Source, LinearMassFlow, Node, Media.Air, TwoPorts
 using Plots
+using NonlinearSolve
+using DASSL
 
 
 EtaC = [
@@ -35,7 +37,7 @@ PRC = [
 
 
 β = [1; 2; 3; 4; 5]
-N_T = [0; 92; 95; 97; 100; 105]
+N_T = [90; 92; 95; 97; 100; 105]
 
 interp_eta = interpolate((β, N_T), EtaC, Gridded(Linear()))
 interp_phi = interpolate((β, N_T), PhicC, Gridded(Linear()))
@@ -49,8 +51,89 @@ interp_pr_f(β, N_T) = interp_pr(β, N_T)
 @register_symbolic interp_phi_f(β, N_T)
 @register_symbolic interp_pr_f(β, N_T)
 
+
+
+
+function compressor_map(; name, phi_f, eta_f, pr_f, β_bounds, N_T_bounds, βinitial=3)
+    
+    vars = @variables begin
+        β(t)=βinitial
+        eta(t)
+        phi(t)
+        N_Tf(t)
+        N_T(t)
+        pr(t)
+    end
+    
+    
+      
+
+    eqs = [
+        N_Tf ~ min(max(N_T, N_T_bounds[1]), N_T_bounds[2]),
+        eta ~ eta_f(β, N_Tf),
+        phi ~ phi_f(β, N_Tf),
+        pr ~ pr_f(β, N_Tf)
+        ]
+
+    ODESystem(eqs, t, vars, []; name=name)
+    # NonlinearSystem(eqs, [β, eta, phi, N_T, pr], []; name=name)
+    
+end
+
+@parameters t
+
+@named cm = compressor_map(
+    phi_f=interp_phi_f,
+    eta_f=interp_eta_f,
+    pr_f=interp_pr_f,
+    β_bounds=(1.0,5.0),
+    N_T_bounds=(90.0,105.0))
+
+@parameters pr N_T
+
+ns = compose(ODESystem([cm.pr ~ pr
+    cm.N_T ~ N_T], t, [], [pr, N_T]; name=:connected), cm)
+
+
+guess = [
+    cm.β => 2.0,
+    cm.eta => 0.83,
+    cm.phi => 85
+    ]
+
+
+ps = [
+    pr => 17.0
+    N_T => 100.
+    ]
+
+
+sys = structural_simplify(ns)
+
+# prob = NonlinearProblem(sys, guess, ps)
+prob = ODEProblem(sys, ps, (0, 100.0))
+# sol = solve(prob, NewtonRaphson())
+
+sol = solve(prob)
+
+sol[cm.β][end]
+sol[cm.N_Tf][end]
+sol[cm.βf][end]
+
+plot(sol, idxs=[cm.β])
+
+
+
+# sol = solve(prob, SSRootfind())
+
+
+# interp_pr_f(3.162, 100.0)
+
+
+
+
 function Compressor(; name,
-                    Medium, phi_f, eta_f, pr_f,
+                    Medium, phi_f, eta_f, pr_f, compressor_map,
                     N_T_design)
 
     pars = @parameters begin
@@ -59,16 +142,11 @@ function Compressor(; name,
 
     vars = @variables begin
         phi(t)
-        phic(t)
-        eta(t)
-        pr(t)
-        β(t) = 2.0
         N_T(t) = 95
         hout_iso(t)
-        omega(t) = 100
-        pr_2(t)
+        omega(t) = 100  
     end
-
+    
     @named two_ports = TwoPorts()
     @unpack dp, dh, m_flow, port_a, port_b  = two_ports
 
@@ -78,7 +156,16 @@ function Compressor(; name,
 
     @named gas_in = Medium.setState_ph()
 
-    subs = [flange_a, flange_b, gas_in]
+    @named cdm = compressor_map
+
+    # @named cm = compressor_map(
+    # phi_f=phi_f,
+    # eta_f=eta_f,
+    # pr_f=pr_f,
+    # β_bounds=(1.0,5.0),
+    # N_T_bounds=(90.0,105.0))
+
+    subs = [flange_a, flange_b, gas_in, cm]
 
     D = Differential(t)
 
@@ -86,26 +173,27 @@ function Compressor(; name,
 
     # w это m_flow
 
-    push!(eqns, N_T ~ 100*omega/sqrt(gas_in.T/290)/N_T_design)
+    push!(eqns, cm.N_T ~ 100*omega/sqrt(gas_in.T/290)/N_T_design)
 
     push!(eqns, gas_in.P ~ port_a.P)
     push!(eqns, gas_in.h ~ instream(port_a.h_outflow))
 
     push!(eqns, hout_iso ~ Medium.isentropicEnthalpy(port_b.P, gas_in))
-    push!(eqns, m_flow ~ phic)
-    push!(eqns, dh ~ 1/eta*(hout_iso - gas_in.h))
+    push!(eqns, m_flow ~ cm.phi)
+    push!(eqns, dh ~ 1/cm.eta*(hout_iso - gas_in.h))
 
     push!(eqns, phi ~ flange_a.phi)
     push!(eqns, phi ~ flange_b.phi)
     push!(eqns, 0 ~ flange_a.tau + flange_b.tau)
 
-    push!(eqns, 1e1*D(β) ~ pr-pr_2)
+    # push!(eqns, 1e1*D(β) ~ pr-pr_2)
     # push!(eqns, pr_2 ~ 1)
-    push!(eqns, pr_2 ~ port_b.P / port_a.P)
+    # push!(eqns, pr ~ port_b.P / port_a.P)
+    push!(eqns, cm.β ~ 3)
 
-    push!(eqns, phic ~ phi_f(β, N_T))
-    push!(eqns, eta ~ eta_f(β, N_T))
-    push!(eqns, pr ~ pr_f(β, N_T))
+    # push!(eqns, phic ~ phi_f(β, 100.))
+    # push!(eqns, eta ~ eta_f(β, 100.))
+    # push!(eqns, pr ~ pr_f(β, 100.))
 
     push!(eqns, D(phi) ~ omega)
 
@@ -142,12 +230,21 @@ connections = [
         source_b
     ])
 
-sys = structural_simplify(model)
-prob = ODAEProblem(sys, [], (0, 100.0))
-sol = solve(prob, Tsit5())
+ps = [
+    compressor.cm.β => 3.0
+    ]
 
-sol[compressor.pr][end]
+sys = structural_simplify(model)
+# prob = ODAEProblem(sys, ps, (0, 100.0))
+prob = ODAEProblem(sys, ps, (0, 100.0))
+# sol = solve(prob)
+
+# prob = SteadyStateProblem(prob)
+
+sol = solve(prob, Tsit5())
+sol[compressor.cm.β][end]
+sol[compressor.cm.pr][end]
 
 sol[t][29]
 
-plot(sol, idxs=[compressor.β])
+plot(sol, idxs=[compressor.cm.β])
