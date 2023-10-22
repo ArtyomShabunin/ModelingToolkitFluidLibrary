@@ -1,6 +1,7 @@
 module ModelingToolkitFluidLibrary
 
 using ModelingToolkit, CoolProp, IfElse
+using ModelingToolkitStandardLibrary.Mechanical.Rotational
 
 @parameters t
 D = Differential(t)
@@ -19,6 +20,9 @@ include("Pipes/Pipes.jl")
 
 export Node
 include("Nodes/Nodes.jl")
+
+export CompressorMap, Compressor
+include("Machines/Machines.jl")
 
 include("Media/Media.jl")
 

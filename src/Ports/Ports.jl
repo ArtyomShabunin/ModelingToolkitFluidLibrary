@@ -9,6 +9,11 @@
     ODESystem(Equation[], t, vars, []; name=name)
 end
 
+@connector function FluidGasPort(; name, P=0.0, h_outflow=0.0)
+    vars = @variables h_outflow(t) = h_outflow [connect = Stream] m_flow(t) = mflow [connect = Flow] P(t) = P Xi_outflow[1:6] [connect = Stream]
+    ODESystem(Equation[], t, vars, []; name=name)
+end
+
 function TwoPorts(; name)
     vars = @variables dp(t) dh(t) m_flow(t)
 
